@@ -3,7 +3,6 @@ const Joi = require("joi");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// In-memory user store (replace with DB in production)
 const users = [];
 const JWT_SECRET = "your_jwt_secret";
 
@@ -19,7 +18,6 @@ const init = async () => {
     host: "localhost",
   });
 
-  // testing get
   server.route({
     method: "GET",
     path: "/",
@@ -28,7 +26,6 @@ const init = async () => {
     },
   });
 
-  // Register
   server.route({
     method: "POST",
     path: "/register",
@@ -36,8 +33,30 @@ const init = async () => {
       validate: {
         payload: Joi.object({
           username: Joi.string().min(4).required(),
-          password: Joi.string().min(8).required(),
+          password: Joi.string()
+            .min(8)
+            .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
+            .required()
+            .messages({
+              "string.pattern.base":
+                "Password must contain at least one uppercase letter and one number",
+            }),
+          confirmPassword: Joi.string()
+            .valid(Joi.ref("password"))
+            .required()
+            .messages({
+              "any.only": "Password confirmation does not match password",
+            }),
         }),
+        failAction: (request, h, err) => {
+          return h
+            .response({
+              statusCode: 400,
+              message: err.details[0].message,
+            })
+            .code(400)
+            .takeover();
+        },
       },
     },
     handler: (request, h) => {
@@ -59,7 +78,6 @@ const init = async () => {
     },
   });
 
-  // Login
   server.route({
     method: "POST",
     path: "/login",
@@ -90,7 +108,6 @@ const init = async () => {
     },
   });
 
-  // Reset Password
   server.route({
     method: "POST",
     path: "/reset-password",
