@@ -30,5 +30,8 @@ This project provides a simple authentication API using Hapi.js, supporting:
 - **POST /register**: `{ username, password }`
 - **POST /login**: `{ username, password }`
 - **POST /reset-password**: `{ username, newPassword }`
+<<<<<<< HEAD
 
 > Note: This demo uses an in-memory user store. For production, use a database.
+=======
+>>>>>>> hpdrr
