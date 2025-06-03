@@ -5,6 +5,7 @@ This project provides a simple authentication API using Hapi.js, supporting:
 - User registration (`/register`)
 - User login (`/login`)
 - Password reset (`/reset-password`)
+- Update Profile (`/update-profile`)
 
 ## Tech Stack
 
@@ -30,3 +31,4 @@ This project provides a simple authentication API using Hapi.js, supporting:
 - **POST /register**: `{ username, password }`
 - **POST /login**: `{ username, password }`
 - **POST /reset-password**: `{ username, newPassword }`
+- **PUT /update-profile**: `{ }`

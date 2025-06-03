@@ -2,12 +2,14 @@ const Hapi = require("@hapi/hapi");
 const Joi = require("joi");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const users = [];
+const resetTokens = {}; // In-memory store for reset tokens
 const JWT_SECRET = "your_jwt_secret";
 
-const validateUser = (username, password) => {
-  const user = users.find((u) => u.username === username);
+const validateUser = (email, password) => {
+  const user = users.find((u) => u.email === email);
   if (!user) return false;
   return bcrypt.compareSync(password, user.password);
 };
@@ -19,20 +21,13 @@ const init = async () => {
   });
 
   server.route({
-    method: "GET",
-    path: "/",
-    handler: (request, h) => {
-      return { message: "Welcome to the Authentication API" };
-    },
-  });
-
-  server.route({
     method: "POST",
     path: "/register",
     options: {
       validate: {
         payload: Joi.object({
-          username: Joi.string().min(4).required(),
+          email: Joi.string().email().required(),
+          name: Joi.string().min(2).required(),
           password: Joi.string()
             .min(8)
             .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
@@ -60,20 +55,20 @@ const init = async () => {
       },
     },
     handler: (request, h) => {
-      const { username, password } = request.payload;
-      if (users.find((u) => u.username === username)) {
+      const { email, name, password } = request.payload;
+      if (users.find((u) => u.email === email)) {
         return h
           .response({
             statusCode: 400,
-            message: "Username already exists",
+            message: "Email already exists",
           })
           .code(400);
       }
       const hashedPassword = bcrypt.hashSync(password, 10);
-      users.push({ username, password: hashedPassword });
+      users.push({ email, name, password: hashedPassword });
       return {
         statusCode: 201,
-        message: "Username registered successfully",
+        message: "User registered successfully",
       };
     },
   });
@@ -84,26 +79,29 @@ const init = async () => {
     options: {
       validate: {
         payload: Joi.object({
-          username: Joi.string().required(),
+          email: Joi.string().email().required(),
           password: Joi.string().required(),
         }),
       },
     },
     handler: (request, h) => {
-      const { username, password } = request.payload;
-      const user = users.find((u) => u.username === username);
+      const { email, password } = request.payload;
+      const user = users.find((u) => u.email === email);
       if (!user || !bcrypt.compareSync(password, user.password)) {
         return h
           .response({
             statusCode: 401,
-            message: "Invalid username or password",
+            message: "Invalid email or password",
           })
           .code(401);
       }
-      const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "1h" });
+      const token = jwt.sign({ email, name: user.name }, JWT_SECRET, {
+        expiresIn: "1h",
+      });
       return {
         token: token,
         message: "Login successfully",
+        user: { email: user.email, name: user.name },
       };
     },
   });
@@ -114,12 +112,11 @@ const init = async () => {
     options: {
       validate: {
         payload: Joi.object({
-          username: Joi.string().required(),
-          oldPassword: Joi.string().required(),
+          email: Joi.string().email().required(),
+          token: Joi.string(), // Optional for step 1
           newPassword: Joi.string()
             .min(8)
             .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
-            .required()
             .messages({
               "string.pattern.base":
                 "Password must contain at least one uppercase letter and one number",
@@ -136,17 +133,38 @@ const init = async () => {
         },
       },
     },
-    handler: (request, h) => {
-      const { username, oldPassword, newPassword } = request.payload;
-      const user = users.find((u) => u.username === username);
+    handler: async (request, h) => {
+      const { email, token, newPassword } = request.payload;
+      const user = users.find((u) => u.email === email);
       if (!user) {
-        return h.response({ message: "Username not found" }).code(404);
+        return h.response({ message: "Email not found" }).code(404);
       }
-      if (!bcrypt.compareSync(oldPassword, user.password)) {
-        return h.response({ message: "Old password is incorrect" }).code(401);
+      // Step 1: Request reset
+      if (!token && !newPassword) {
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const expires = Date.now() + 1000 * 60 * 15; // 15 minutes
+        resetTokens[email] = { token: resetToken, expires };
+        // Simulate sending email
+        console.log(
+          `Password reset link: https://your-frontend/reset?email=${encodeURIComponent(
+            email
+          )}&token=${resetToken}`
+        );
+        return { message: "Password reset link sent to your email" };
       }
-      user.password = bcrypt.hashSync(newPassword, 10);
-      return { message: "Password reset successfully" };
+      // Step 2: Reset with token
+      if (token && newPassword) {
+        const record = resetTokens[email];
+        if (!record || record.token !== token || record.expires < Date.now()) {
+          return h
+            .response({ message: "Invalid or expired reset token" })
+            .code(400);
+        }
+        user.password = bcrypt.hashSync(newPassword, 10);
+        delete resetTokens[email];
+        return { message: "Password reset successfully" };
+      }
+      return h.response({ message: "Invalid request" }).code(400);
     },
   });
 
@@ -156,8 +174,9 @@ const init = async () => {
     options: {
       validate: {
         payload: Joi.object({
-          username: Joi.string().min(4).required(),
-          newUsername: Joi.string().min(4),
+          email: Joi.string().email().required(),
+          newEmail: Joi.string().email(),
+          newName: Joi.string().min(2),
           newPassword: Joi.string()
             .min(8)
             .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
@@ -178,23 +197,26 @@ const init = async () => {
       },
     },
     handler: (request, h) => {
-      const { username, newUsername, newPassword } = request.payload;
-      const user = users.find((u) => u.username === username);
+      const { email, newEmail, newName, newPassword } = request.payload;
+      const user = users.find((u) => u.email === email);
       if (!user) {
         return h
           .response({ statusCode: 404, message: "User not found" })
           .code(404);
       }
-      if (newUsername) {
-        if (users.find((u) => u.username === newUsername)) {
+      if (newEmail) {
+        if (users.find((u) => u.email === newEmail)) {
           return h
             .response({
               statusCode: 400,
-              message: "New username already exists",
+              message: "New email already exists",
             })
             .code(400);
         }
-        user.username = newUsername;
+        user.email = newEmail;
+      }
+      if (newName) {
+        user.name = newName;
       }
       if (newPassword) {
         user.password = bcrypt.hashSync(newPassword, 10);
@@ -202,7 +224,7 @@ const init = async () => {
       return {
         statusCode: 200,
         message: "Profile updated successfully",
-        user: { username: user.username },
+        user: { email: user.email, name: user.name },
       };
     },
   });
