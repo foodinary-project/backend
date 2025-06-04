@@ -14,8 +14,8 @@ const JWT_SECRET = "your_jwt_secret";
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.GMAIL_USER, // Your Gmail address
-    pass: process.env.GMAIL_PASS, // Your Gmail app password
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
   },
 });
 
@@ -124,7 +124,7 @@ const init = async () => {
       validate: {
         payload: Joi.object({
           email: Joi.string().email().required(),
-          token: Joi.string(), // Optional for step 1
+          token: Joi.string(),
           newPassword: Joi.string()
             .min(8)
             .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
@@ -150,12 +150,10 @@ const init = async () => {
       if (!user) {
         return h.response({ message: "Email not found" }).code(404);
       }
-      // Step 1: Request reset
       if (!token && !newPassword) {
         const resetToken = crypto.randomBytes(32).toString("hex");
         const expires = Date.now() + 1000 * 60 * 15; // 15 minutes
         resetTokens[email] = { token: resetToken, expires };
-        // Send email with Nodemailer
         const resetLink = `https://your-frontend/reset?email=${encodeURIComponent(
           email
         )}&token=${resetToken}`;
@@ -177,7 +175,6 @@ const init = async () => {
         }
         return { message: "Password reset link sent to your email" };
       }
-      // Step 2: Reset with token
       if (token && newPassword) {
         const record = resetTokens[email];
         if (!record || record.token !== token || record.expires < Date.now()) {
