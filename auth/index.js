@@ -1,4 +1,4 @@
-// require("dotenv").config();
+require("dotenv").config();
 const Hapi = require("@hapi/hapi");
 const Joi = require("joi");
 const bcrypt = require("bcryptjs");
@@ -28,7 +28,22 @@ const validateUser = (email, password) => {
 const init = async () => {
   const server = Hapi.server({
     port: 3000,
-    host: "0.0.0.0",
+    host: process.env.HOST || "0.0.0.0",
+    routes: {
+      // ADD THIS SECTION FOR CORS
+      cors: {
+        origin: [
+          "http://localhost:3000", // Common frontend port, adjust if needed
+          "http://localhost:3001", // Another common frontend port
+          "http://localhost:8080", // Another common frontend port
+          "http://localhost:5173", // Common for Vite
+          "http://localhost:4200", // Common for Angular
+          // Add any other ports your frontend team uses for development
+        ],
+        headers: ["Accept", "Authorization", "Content-Type", "If-None-Match"], // Ensure "Authorization" is listed if you use Bearer tokens
+        credentials: true, // If your frontend needs to send cookies or use Authorization headers
+      },
+    },
   });
 
   server.route({
@@ -154,7 +169,7 @@ const init = async () => {
         const resetToken = crypto.randomBytes(32).toString("hex");
         const expires = Date.now() + 1000 * 60 * 15; // 15 minutes
         resetTokens[email] = { token: resetToken, expires };
-        const resetLink = `https://your-frontend/reset?email=${encodeURIComponent(
+        const resetLink = `https://backend-4lij.onrender.com/reset-password?email=${encodeURIComponent(
           email
         )}&token=${resetToken}`;
         try {
@@ -196,16 +211,17 @@ const init = async () => {
     options: {
       validate: {
         payload: Joi.object({
-          email: Joi.string().email().required(),
-          newEmail: Joi.string().email(),
-          newName: Joi.string().min(2),
-          newPassword: Joi.string()
+          email: Joi.string().email().required(), // Current email to identify the user
+          newEmail: Joi.string().email(), // Optional: new email
+          newName: Joi.string().min(2), // Optional: new name
+          newPassword: Joi.string() // Optional: new password
             .min(8)
             .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
             .messages({
               "string.pattern.base":
                 "Password must contain at least one uppercase letter and one number",
             }),
+          newProfilePictureUrl: Joi.string().uri().allow(null, "").optional(), // ADDED: Optional, allow URL, null, or empty string
         }),
         failAction: (request, h, err) => {
           return h
@@ -219,15 +235,26 @@ const init = async () => {
       },
     },
     handler: (request, h) => {
-      const { email, newEmail, newName, newPassword } = request.payload;
-      const user = users.find((u) => u.email === email);
-      if (!user) {
+      const { email, newEmail, newName, newPassword, newProfilePictureUrl } =
+        request.payload; // DESTRUCTURE newProfilePictureUrl
+
+      const userIndex = users.findIndex((u) => u.email === email); // Find index to modify directly in the array
+
+      if (userIndex === -1) {
         return h
           .response({ statusCode: 404, message: "User not found" })
           .code(404);
       }
-      if (newEmail) {
-        if (users.find((u) => u.email === newEmail)) {
+
+      // Get a reference to the user object to modify
+      const userToUpdate = users[userIndex];
+
+      if (newEmail && newEmail !== userToUpdate.email) {
+        // Check if newEmail is different before checking for existence
+        if (
+          users.find((u, index) => u.email === newEmail && index !== userIndex)
+        ) {
+          // Ensure new email isn't taken by another user
           return h
             .response({
               statusCode: 400,
@@ -235,19 +262,81 @@ const init = async () => {
             })
             .code(400);
         }
-        user.email = newEmail;
+        userToUpdate.email = newEmail;
       }
       if (newName) {
-        user.name = newName;
+        userToUpdate.name = newName;
       }
       if (newPassword) {
-        user.password = bcrypt.hashSync(newPassword, 10);
+        userToUpdate.password = bcrypt.hashSync(newPassword, 10);
       }
+
+      // ADDED: Update profile picture URL if provided
+      // The `undefined` check is important because if the field is not in the payload, it will be undefined.
+      // Joi's `optional()` means it might not be there. `allow(null, '')` means it could be explicitly set to null or empty.
+      if (newProfilePictureUrl !== undefined) {
+        userToUpdate.profilePictureUrl = newProfilePictureUrl;
+      }
+
+      // Update the user in the array (though direct modification above already does this for objects)
+      users[userIndex] = userToUpdate;
+
       return {
         statusCode: 200,
         message: "Profile updated successfully",
-        user: { email: user.email, name: user.name },
+        user: {
+          // Return the updated user details
+          email: userToUpdate.email,
+          name: userToUpdate.name,
+          profilePictureUrl: userToUpdate.profilePictureUrl,
+        },
       };
+    },
+  });
+
+  server.route({
+    method: "GET",
+    path: "/profile",
+    options: {
+      handler: (request, h) => {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return h
+            .response({ statusCode: 401, message: "Missing or invalid token" })
+            .code(401);
+        }
+
+        const token = authHeader.substring(7); // Remove "Bearer " prefix
+        const decodedToken = verifyToken(token);
+
+        if (!decodedToken || !decodedToken.email) {
+          return h
+            .response({ statusCode: 401, message: "Invalid or expired token" })
+            .code(401);
+        }
+
+        const user = users.find((u) => u.email === decodedToken.email);
+        if (!user) {
+          // This case should ideally not happen if the token is valid and user exists
+          return h
+            .response({ statusCode: 404, message: "User not found" })
+            .code(404);
+        }
+
+        // For now, profilePictureUrl is null.
+        // You'll need to modify user registration/update to include this.
+        return h
+          .response({
+            statusCode: 200,
+            message: "Profile retrieved successfully",
+            user: {
+              email: user.email,
+              name: user.name,
+              profilePictureUrl: user.profilePictureUrl || null, // Assuming you add this field to your user object
+            },
+          })
+          .code(200);
+      },
     },
   });
 
