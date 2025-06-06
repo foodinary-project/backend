@@ -1,11 +1,12 @@
-# Foodinary Backend Authentication API
+# Foodinary Backend Authentication & Prediction API
 
-This project provides a simple authentication API using Hapi.js, supporting:
+This project provides a backend API for Foodinary, focusing on Indonesian traditional cuisine. It supports:
 
-- User registration (`/register`)
-- User login (`/login`)
-- Password reset via email (`/reset-password`)
-- Update Profile (`/update-profile`)
+- User registration and authentication
+- Password reset via email
+- Profile management
+- Image-based cuisine prediction using a deployed machine learning model
+- User prediction history and favorites management
 
 ## Tech Stack
 
@@ -14,6 +15,8 @@ This project provides a simple authentication API using Hapi.js, supporting:
 - [bcryptjs](https://www.npmjs.com/package/bcryptjs) (password hashing)
 - [jsonwebtoken](https://www.npmjs.com/package/jsonwebtoken) (JWT auth)
 - [nodemailer](https://nodemailer.com/about/) (email sending for password reset)
+- [@google-cloud/storage](https://www.npmjs.com/package/@google-cloud/storage) (profile picture upload)
+- [pg](https://www.npmjs.com/package/pg) (PostgreSQL database)
 
 ## Usage
 
@@ -34,66 +37,50 @@ Create a `.env` file in the project root with:
 ```
 GMAIL_USER=your-gmail-address@gmail.com
 GMAIL_PASS=your-gmail-app-password
+HOST=localhost
+GCS_BUCKET_NAME=your-gcs-bucket
+GOOGLE_APPLICATION_CREDENTIALS=your-gcs-credentials.json
+DATABASE_URL=your-postgres-connection-string
+JWT_SECRET=your-jwt-secret
 ```
 
 ## Endpoints
 
-### POST `/register`
+### Authentication & Profile
 
-**Request Body:**
+- `POST /register` — Register a new user
+- `POST /login` — User login
+- `POST /reset-password` — Request/reset password via email
+- `GET /profile` — Get user profile (JWT required)
+- `PUT /update-profile` — Update user profile (JWT required)
 
-```
-{
-  "email": "user@example.com",
-  "name": "User Name",
-  "password": "Password1",
-  "confirmPassword": "Password1"
-}
-```
+### Prediction & Recipe
 
-### POST `/login`
+- `POST /prediction` — Upload an image, get cuisine prediction and recipe
+  - **Request:** `multipart/form-data` with an image file
+  - **Response:**
+    ```json
+    {
+      "prediction": "Rendang",
+      "confidence": 0.98,
+      "recipe": { "title": "Rendang", "ingredients": [...], "steps": [...] }
+    }
+    ```
 
-**Request Body:**
+### History
 
-```
-{
-  "email": "user@example.com",
-  "password": "Password1"
-}
-```
+- `GET /history` — Get user's prediction history (JWT required)
+- `DELETE /delete-history` — Delete user's prediction history (JWT required)
 
-### POST `/reset-password`
+### Favorites
 
-**Step 1: Request reset link**
+- `GET /favorites` — Get user's favorite recipes (JWT required)
+- `PUT /favorites` — Add or update user's favorite recipes (JWT required)
 
-```
-{
-  "email": "user@example.com"
-}
-```
+## ML Model Integration
 
-**Step 2: Reset password with token**
-
-```
-{
-  "email": "user@example.com",
-  "token": "token-from-email",
-  "newPassword": "NewPassword1"
-}
-```
-
-### PUT `/update-profile`
-
-**Request Body (any field can be updated):**
-
-```
-{
-  "email": "user@example.com",
-  "newEmail": "new@example.com", // optional
-  "newName": "New Name",         // optional
-  "newPassword": "NewPassword1"  // optional
-}
-```
+- The `/prediction` endpoint accepts an image from the user, sends it to the deployed ML model API, and returns the predicted cuisine and its recipe.
+- You must set the ML model API URL in your environment/configuration.
 
 ## Notes
 
@@ -101,3 +88,4 @@ GMAIL_PASS=your-gmail-app-password
 - Password reset links are valid for 15 minutes.
 - For production, use a persistent database instead of in-memory arrays.
 - The password reset email uses Gmail SMTP; you must set up an app password for your Gmail account.
+- For image upload and prediction, ensure your ML model endpoint is accessible and accepts image data.
