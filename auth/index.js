@@ -302,7 +302,57 @@ const init = async () => {
   server.route({
     method: "GET",
     path: "/profile",
-    // ... same handler as before, but it will fetch from DB via decodedToken.userId
+    options: {
+      validate: {
+        headers: Joi.object({
+          authorization: Joi.string().required(), // Expect JWT in Authorization header
+        }).unknown(true), // Allow other headers
+        failAction: (request, h, err) => {
+          return h
+            .response({ statusCode: 400, message: err.details[0].message })
+            .code(400)
+            .takeover();
+        },
+      },
+    },
+    handler: (request, h) => {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return h
+          .response({
+            statusCode: 401,
+            message: "Missing or invalid token format",
+          })
+          .code(401);
+      }
+      const token = authHeader.substring(7);
+      const decodedToken = verifyToken(token);
+
+      if (!decodedToken || !decodedToken.email) {
+        return h
+          .response({ statusCode: 401, message: "Invalid or expired token" })
+          .code(401);
+      }
+
+      const user = users.find((u) => u.email === decodedToken.email);
+      if (!user) {
+        return h
+          .response({ statusCode: 404, message: "User not found" })
+          .code(404);
+      }
+
+      return h
+        .response({
+          statusCode: 200,
+          message: "Profile retrieved successfully",
+          user: {
+            email: user.email,
+            name: user.name,
+            profilePictureUrl: user.profilePictureUrl || null,
+          },
+        })
+        .code(200);
+    },
   });
 
   // (Your other routes like /reset-password and /generate-upload-url can remain largely the same,
