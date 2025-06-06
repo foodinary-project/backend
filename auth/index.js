@@ -265,6 +265,7 @@ const init = async () => {
     },
   });
 
+  // UPDATE PROFILE
   server.route({
     method: "PUT",
     path: "/update-profile",
