@@ -17,7 +17,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_PASS = process.env.GMAIL_PASS;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:8080";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -452,7 +452,7 @@ const init = async () => {
       if (!token && !newPassword) {
         // Requesting reset link
         const result = await pool.query(
-          "SELECT id FROM users WHERE email = $1",
+          "SELECT id, name FROM users WHERE email = $1",
           [email]
         );
         if (result.rows.length === 0)
@@ -462,7 +462,9 @@ const init = async () => {
                 "If a user with this email exists, a reset link has been sent.",
             })
             .code(200); // Don't reveal if email exists
-        const resetToken = crypto.randomBytes(32).toString("hex");
+
+        const userName = result.rows[0].name || "there";
+        const resetToken = Math.floor(10000 + Math.random() * 90000).toString();
         resetTokens[email] = {
           token: resetToken,
           expires: Date.now() + 15 * 60 * 1000,
@@ -470,6 +472,31 @@ const init = async () => {
         const resetLink = `${FRONTEND_URL}/reset-password?email=${encodeURIComponent(
           email
         )}&token=${resetToken}`;
+
+        // Styled email with highlighted token and link
+        const emailText = `Hi ${userName},
+
+          We received a request to reset the password for your account associated with this email address.
+
+          To reset your password, please use the following token:
+
+          ==============================
+          🔑 Reset Token: *${resetToken}*
+          ==============================
+
+          Or, you can simply click the button below:
+
+          ==============================
+          ${resetLink}
+          ==============================
+
+          If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.
+
+          ---
+
+          Best regards,  
+          The Foodinary Team  
+          foodinary.project@gmail.com | https://foodinary.com`;
         try {
           await transporter.sendMail({
             from: `"${
@@ -478,7 +505,24 @@ const init = async () => {
             }" <foodinary.project@gmail.com>`,
             to: email,
             subject: "Password Reset Request",
-            text: `Click here to reset: ${resetLink}`,
+            text: emailText,
+            html: `<div style="font-family:sans-serif;line-height:1.6">
+                     <p>Hi <b>${userName}</b>,</p>
+                     <p>We received a request to reset the password for your account associated with this email address.</p>
+                     <p>To reset your password, please use the following token:</p>
+                     <div style="background:#f5f5f5;border-radius:6px;padding:16px 24px;font-size:1.2em;display:inline-block;margin:12px 0;">
+                       <b>🔑 Reset Token: <span style="color:#1976d2;font-size:1.3em;">${resetToken}</span></b>
+                     </div>
+                     <p>Or, you can simply click the button below:</p>
+                     <a href="${resetLink}" style="display:inline-block;background:#1976d2;color:#fff;text-decoration:none;padding:12px 24px;border-radius:4px;font-weight:bold;margin:12px 0;">Reset Password</a>
+                     <p>If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.</p>
+                     <hr>
+                     <p style="font-size:0.95em;">
+                       Best regards,<br>
+                       The Foodinary Team<br>
+                       <a href="mailto:foodinary.project@gmail.com" style="color:#1976d2">foodinary.project@gmail.com</a> | <a href="https://foodinary.com" style="color:#1976d2">https://foodinary.com</a>
+                     </p>
+                   </div>`,
           });
         } catch (err) {
           console.error(err);
