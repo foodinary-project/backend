@@ -35,9 +35,12 @@ try {
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+    // process.env.NODE_ENV === "production"
+    //   ? { rejectUnauthorized: false }
+    //   : false,
+    {
+      rejectUnauthorized: false,
+    },
 });
 
 const transporter = nodemailer.createTransport({
@@ -294,10 +297,29 @@ const init = async () => {
           true
         ),
         payload: Joi.object({
+          // Fields for general profile update
           newEmail: Joi.string().email().optional(),
           newName: Joi.string().min(2).optional(),
           newProfilePictureUrl: Joi.string().uri().allow(null, "").optional(),
-        }),
+          // Fields for password change
+          oldPassword: Joi.string().optional(),
+          newPassword: Joi.string()
+            .min(8)
+            .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
+            .optional()
+            .messages({
+              "string.pattern.base":
+                "Password must contain at least one uppercase letter and one number",
+            }),
+          confirmNewPassword: Joi.string()
+            .valid(Joi.ref("newPassword"))
+            .optional()
+            .messages({
+              "any.only": "Password confirmation does not match new password",
+            }),
+        })
+          .with("newPassword", ["oldPassword", "confirmNewPassword"]) // Requires old and confirm if new is present
+          .with("oldPassword", "newPassword"), // Requires new if old is present
         failAction: (request, h, err) =>
           h
             .response({ statusCode: 400, message: err.details[0].message })
@@ -314,12 +336,47 @@ const init = async () => {
           .response({ statusCode: 401, message: "Invalid or expired token" })
           .code(401);
       }
+
       const userId = decodedToken.userId;
-      const { newEmail, newName, newProfilePictureUrl } = request.payload;
+      const {
+        newEmail,
+        newName,
+        newProfilePictureUrl,
+        oldPassword,
+        newPassword,
+      } = request.payload;
+
       try {
         const fields = [],
           values = [];
         let paramIndex = 1;
+
+        // Handle password change first
+        if (newPassword) {
+          const userResult = await pool.query(
+            "SELECT password_hash FROM users WHERE id = $1",
+            [userId]
+          );
+          if (userResult.rows.length === 0) {
+            return h
+              .response({ statusCode: 404, message: "User not found" })
+              .code(404);
+          }
+          const isOldPasswordValid = await bcrypt.compare(
+            oldPassword,
+            userResult.rows[0].password_hash
+          );
+          if (!isOldPasswordValid) {
+            return h
+              .response({ statusCode: 403, message: "Incorrect old password." })
+              .code(403);
+          }
+          const newHashedPassword = await bcrypt.hash(newPassword, 10);
+          fields.push(`password_hash = $${paramIndex++}`);
+          values.push(newHashedPassword);
+        }
+
+        // Handle other profile fields
         if (newName) {
           fields.push(`name = $${paramIndex++}`);
           values.push(newName);
@@ -332,21 +389,19 @@ const init = async () => {
           fields.push(`profile_picture_url = $${paramIndex++}`);
           values.push(newProfilePictureUrl);
         }
+
         if (fields.length === 0) {
           return h
             .response({ statusCode: 400, message: "No fields to update" })
             .code(400);
         }
+
         values.push(userId);
         const updateQuery = `UPDATE users SET ${fields.join(
           ", "
         )} WHERE id = $${paramIndex} RETURNING id, email, name, profile_picture_url`;
         const result = await pool.query(updateQuery, values);
-        if (result.rows.length === 0) {
-          return h
-            .response({ statusCode: 404, message: "User not found" })
-            .code(404);
-        }
+
         return h
           .response({
             statusCode: 200,
