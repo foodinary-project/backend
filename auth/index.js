@@ -515,13 +515,12 @@ const init = async () => {
                      </div>
                      <p>Or, you can simply click the button below:</p>
                      <a href="${resetLink}" style="display:inline-block;background:#1976d2;color:#fff;text-decoration:none;padding:12px 24px;border-radius:4px;font-weight:bold;margin:12px 0;">Reset Password</a>
-                     <p style="word-break:break-all;color:#555;">${resetLink}</p>
                      <p>If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.</p>
                      <hr>
                      <p style="font-size:0.95em;">
                        Best regards,<br>
                        The Foodinary Team<br>
-                       <a href="mailto:foodinary.project@gmail.com" style="color:#1976d2">foodinary.project@gmail.com</a> | <a href="https://yourapp.com" style="color:#1976d2">https://yourapp.com</a>
+                       <a href="mailto:foodinary.project@gmail.com" style="color:#1976d2">foodinary.project@gmail.com</a> | <a href="https://foodinary.com" style="color:#1976d2">https://foodinary.com</a>
                      </p>
                    </div>`,
           });
