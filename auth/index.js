@@ -17,7 +17,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_PASS = process.env.GMAIL_PASS;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:8080";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -462,7 +462,7 @@ const init = async () => {
                 "If a user with this email exists, a reset link has been sent.",
             })
             .code(200); // Don't reveal if email exists
-        const resetToken = crypto.randomBytes(32).toString("hex");
+        const resetToken = Math.floor(10000 + Math.random() * 90000).toString();
         resetTokens[email] = {
           token: resetToken,
           expires: Date.now() + 15 * 60 * 1000,
@@ -470,6 +470,25 @@ const init = async () => {
         const resetLink = `${FRONTEND_URL}/reset-password?email=${encodeURIComponent(
           email
         )}&token=${resetToken}`;
+        const emailText = `Hi there,
+
+          We received a request to reset the password for your account associated with this email address.
+
+          To reset your password, please use the following token:
+
+          🔑 Reset Token: ${resetToken}
+
+          Or, you can simply click the button below:
+
+          ${resetLink}
+
+          If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.
+
+          ---
+
+          Best regards,  
+          The Foodinary Team  
+          foodinary.project@gmail.com | foodinary.com`;
         try {
           await transporter.sendMail({
             from: `"${
@@ -478,7 +497,7 @@ const init = async () => {
             }" <foodinary.project@gmail.com>`,
             to: email,
             subject: "Password Reset Request",
-            text: `Click here to reset: ${resetLink}`,
+            text: `${emailText}`,
           });
         } catch (err) {
           console.error(err);
