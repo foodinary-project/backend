@@ -338,8 +338,8 @@ const init = async () => {
           validate: {
             headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
             payload: Joi.object({
-              newEmail: Joi.string().email().optional(),
-              newName: Joi.string().min(2).optional(),
+              name: Joi.string().min(2).optional(),
+              email: Joi.string().email().optional(),
               newProfilePictureUrl: Joi.string().uri().allow(null, "").optional(),
               oldPassword: Joi.string().min(8).optional(),
               newPassword: Joi.string().min(8).pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$")).optional().messages({
