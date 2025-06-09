@@ -425,7 +425,7 @@ const init = async () => {
                 const app = await GradioClient(HUGGING_FACE_SPACE);
                 const result = await app.predict("/predict", { image: imageBlob });
                 if (!result || !result.data || !Array.isArray(result.data) || result.data.length < 1) {
-                    return h.response({ statusCode: 404, message: "Could not identify the food in the image." }).code(404);
+                    return h.response({ statusCode: 404, message: "Maaf, resep yang Anda cari belum tersedia saat ini. Silakan coba lagi nanti atau lihat resep lain yang sudah tersedia. Terima kasih!" }).code(404);
                 }
                 const rawPredictionString = result.data[0];
                 const predictedName = rawPredictionString.split('(')[0].trim();
@@ -433,7 +433,7 @@ const init = async () => {
                 const recipe = recipes[lookupKey];
                 if (!recipe) {
                     console.log(`Lookup failed. Predicted label: "${predictedName}", Normalized key: "${lookupKey}"`);
-                    return h.response({ statusCode: 404, message: `Food '${predictedName}' identified, but no recipe is available yet.` }).code(404);
+                    return h.response({ statusCode: 404, message: "Maaf, resep yang Anda cari belum tersedia saat ini. Silakan coba lagi nanti atau lihat resep lain yang sudah tersedia. Terima kasih!" }).code(404);
                 }
                 return h.response({ statusCode: 200, prediction: { label: recipe.name }, recipe: recipe }).code(200);
             } catch (error) {
