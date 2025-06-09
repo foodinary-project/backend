@@ -1,15 +1,14 @@
-// Use dotenv for development. In production (GCP), environment variables are set directly.
+// Use dotenv for development. In production, environment variables are set directly.
 import 'dotenv/config';
 
 import Hapi from '@hapi/hapi';
 import Joi from 'joi';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { Storage } from '@google-cloud/storage';
 import pg from 'pg';
 import axios from 'axios';
+import { v2 as cloudinary } from 'cloudinary'; // NEW: Import Cloudinary
 import { client as GradioClient } from '@gradio/client';
 
 // Import JSON data with an import assertion
@@ -19,7 +18,6 @@ const { Pool } = pg;
 
 // --- Load configuration from environment variables ---
 const JWT_SECRET = process.env.JWT_SECRET;
-const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_PASS = process.env.GMAIL_PASS;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:8080";
@@ -28,9 +26,21 @@ const HOST = process.env.HOST || "0.0.0.0";
 const DATABASE_URL = process.env.DATABASE_URL;
 const HUGGING_FACE_SPACE = process.env.HUGGING_FACE_SPACE;
 
+// --- NEW: Cloudinary Configuration ---
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+
+cloudinary.config({
+  cloud_name: CLOUDINARY_CLOUD_NAME,
+  api_key: CLOUDINARY_API_KEY,
+  api_secret: CLOUDINARY_API_SECRET,
+  secure: true,
+});
+
+
 // --- Transform recipe array into a searchable object ---
 const recipes = recipeData.recipes.reduce((acc, recipe) => {
-    // Normalize the key to be more robust: lowercase and single-spaced
     const key = recipe.name.toLowerCase().replace(/\s+/g, ' ');
     acc[key] = recipe;
     return acc;
@@ -38,15 +48,6 @@ const recipes = recipeData.recipes.reduce((acc, recipe) => {
 
 // In-memory store for reset codes.
 const resetTokens = {};
-
-// --- Service Initialization ---
-let storage;
-try {
-  storage = new Storage();
-  console.log("Google Cloud Storage client initialized successfully.");
-} catch (error) {
-  console.error("Could not initialize Google Cloud Storage client.", error);
-}
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -68,8 +69,9 @@ const verifyToken = (token) => {
 };
 
 const init = async () => {
-  if (!JWT_SECRET || !DATABASE_URL || !HUGGING_FACE_SPACE) {
-    console.error("FATAL ERROR: JWT_SECRET, DATABASE_URL, and HUGGING_FACE_SPACE environment variables must be set.");
+  // Updated pre-flight checks for new environment variables
+  if (!JWT_SECRET || !DATABASE_URL || !HUGGING_FACE_SPACE || !CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+    console.error("FATAL ERROR: All required environment variables (JWT, DB, HuggingFace, Cloudinary) must be set.");
     process.exit(1);
   }
   try {
@@ -415,36 +417,24 @@ const init = async () => {
         handler: async (request, h) => {
             const decodedToken = verifyToken(request.headers.authorization.substring(7));
             if (!decodedToken) { return h.response({ statusCode: 401, message: "Unauthorized" }).code(401); }
-
             const { imageUrl } = request.payload;
             try {
                 const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
                 const imageBlob = new Blob([imageResponse.data], { type: imageResponse.headers['content-type'] });
                 const app = await GradioClient(HUGGING_FACE_SPACE);
                 const result = await app.predict("/predict", { image: imageBlob });
-
                 if (!result || !result.data || !Array.isArray(result.data) || result.data.length < 1) {
                     return h.response({ statusCode: 404, message: "Could not identify the food in the image." }).code(404);
                 }
-
                 const rawPredictionString = result.data[0];
                 const predictedName = rawPredictionString.split('(')[0].trim();
                 const lookupKey = predictedName.toLowerCase().replace(/\s+/g, ' ');
                 const recipe = recipes[lookupKey];
-                
                 if (!recipe) {
                     console.log(`Lookup failed. Predicted label: "${predictedName}", Normalized key: "${lookupKey}"`);
                     return h.response({ statusCode: 404, message: `Food '${predictedName}' identified, but no recipe is available yet.` }).code(404);
                 }
-
-                return h.response({
-                    statusCode: 200,
-                    prediction: {
-                        label: recipe.name // Return the properly cased name from our recipe JSON
-                    },
-                    recipe: recipe
-                }).code(200);
-
+                return h.response({ statusCode: 200, prediction: { label: recipe.name }, recipe: recipe }).code(200);
             } catch (error) {
                 console.error("Error during prediction:", error);
                 return h.response({ statusCode: 500, message: "An error occurred while processing the image." }).code(500);
@@ -454,33 +444,41 @@ const init = async () => {
 
     // GENERATE UPLOAD URL
     server.route({
-        method: "POST",
-        path: "/generate-upload-url",
+        method: 'POST',
+        path: '/generate-upload-signature',
         options: {
-          validate: {
-            headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
-            payload: Joi.object({
-              fileName: Joi.string().required(),
-              contentType: Joi.string().valid('image/jpeg', 'image/png', 'image/webp').required(),
-            }),
-            failAction: (request, h, err) => h.response({ statusCode: 400, message: err.details[0].message }).code(400).takeover(),
-          },
+            validate: {
+                headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
+                // No payload is needed, the signature is generic.
+                failAction: (request, h, err) => h.response({ statusCode: 400, message: err.details[0].message }).code(400).takeover(),
+            }
         },
         handler: async (request, h) => {
-          if (!storage) { return h.response({ statusCode: 500, message: "Cloud storage not configured" }).code(500); }
-          const decodedToken = verifyToken(request.headers.authorization.substring(7));
-          if (!decodedToken) { return h.response({ statusCode: 401, message: "Unauthorized" }).code(401); }
-          const { fileName, contentType } = request.payload;
-          const uniqueFileName = `${decodedToken.userId}-${Date.now()}-${fileName.replace(/\s+/g, '_')}`;
-          const options = { version: "v4", action: "write", expires: Date.now() + 15 * 60 * 1000, contentType };
-          try {
-            const [url] = await storage.bucket(GCS_BUCKET_NAME).file(uniqueFileName).getSignedUrl(options);
-            return { statusCode: 200, uploadUrl: url, publicUrl: `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${uniqueFileName}` };
-          } catch (error) {
-            console.error("Failed to generate signed URL:", error);
-            return h.response({ statusCode: 500, message: "Failed to generate upload URL." }).code(500);
-          }
-        },
+            const decodedToken = verifyToken(request.headers.authorization.substring(7));
+            if (!decodedToken) { return h.response({ statusCode: 401, message: "Unauthorized" }).code(401); }
+
+            const timestamp = Math.round((new Date).getTime() / 1000);
+
+            try {
+                // Generate the signature for the upload.
+                const signature = cloudinary.utils.api_sign_request(
+                    { timestamp: timestamp },
+                    CLOUDINARY_API_SECRET
+                );
+                
+                return h.response({
+                    statusCode: 200,
+                    timestamp,
+                    signature,
+                    apiKey: CLOUDINARY_API_KEY,
+                    cloudName: CLOUDINARY_CLOUD_NAME,
+                }).code(200);
+
+            } catch (error) {
+                console.error("Error generating Cloudinary signature:", error);
+                return h.response({ statusCode: 500, message: "Could not generate upload signature." }).code(500);
+            }
+        }
     });
     
   // --- Server Start ---
