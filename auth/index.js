@@ -92,7 +92,11 @@ const init = async () => {
           "http://localhost:5173",
           "http://localhost:3000",
           "http://localhost:8080",
+<<<<<<< HEAD
           "https://dainty-palmier-676868.netlify.app",
+=======
+          "https://dainty-palmier-676868.netlify.app/",
+>>>>>>> 176fb4cc288fd0ec498d33c82ff667cc4ce80721
            FRONTEND_URL
         ].filter(Boolean),
         headers: ["Accept", "Authorization", "Content-Type", "If-None-Match", "X-File-Name", "X-File-Type"],
