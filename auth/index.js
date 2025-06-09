@@ -37,7 +37,7 @@ const recipes = recipeData.recipes.reduce((acc, recipe) => {
 }, {});
 
 // In-memory store for reset codes.
-const resetCodes = {};
+const resetTokens = {};
 
 // --- Service Initialization ---
 let storage;
@@ -171,6 +171,204 @@ const init = async () => {
         },
     });
 
+    // GET PROFILE
+    server.route({
+        method: "GET",
+        path: "/profile",
+        options: {
+          validate: {
+            headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
+            failAction: (request, h, err) => h.response({ statusCode: 400, message: err.details[0].message }).code(400).takeover(),
+          },
+        },
+        handler: async (request, h) => {
+          const authHeader = request.headers.authorization;
+          if (!authHeader || !authHeader.startsWith("Bearer ")) { return h.response({ statusCode: 401, message: "Missing or invalid token format" }).code(401); }
+          const token = authHeader.substring(7);
+          const decodedToken = verifyToken(token);
+          if (!decodedToken || !decodedToken.userId) { return h.response({ statusCode: 401, message: "Invalid or expired token" }).code(401); }
+          try {
+            const result = await pool.query("SELECT id, email, name, profile_picture_url FROM users WHERE id = $1", [decodedToken.userId]);
+            if (result.rows.length === 0) { return h.response({ statusCode: 404, message: "User not found" }).code(404); }
+            const user = result.rows[0];
+            return { statusCode: 200, message: "Profile retrieved successfully", user: { id: user.id, email: user.email, name: user.name, profilePictureUrl: user.profile_picture_url || null } };
+          } catch (err) {
+            console.error("Error fetching profile:", err);
+            return h.response({ statusCode: 500, message: "Internal Server Error" }).code(500);
+          }
+        },
+    });
+
+    // RESET PASSWORD
+    server.route({
+    method: "POST",
+    path: "/reset-password",
+    options: {
+      validate: {
+        payload: Joi.object({
+          email: Joi.string().email().required(),
+          token: Joi.string().optional(),
+          newPassword: Joi.string()
+            .min(8)
+            .pattern(new RegExp("^(?=.*[A-Z])(?=.*\\d).+$"))
+            .optional()
+            .messages({
+              "string.pattern.base":
+                "Password must contain at least one uppercase letter and one number",
+            }),
+        }),
+        failAction: (request, h, err) =>
+          h
+            .response({ statusCode: 400, message: err.details[0].message })
+            .code(400)
+            .takeover(),
+      },
+    },
+    handler: async (request, h) => {
+      const { email, token, newPassword } = request.payload;
+      if (!token && !newPassword) {
+        // Requesting reset link
+        const result = await pool.query(
+          "SELECT id, name FROM users WHERE email = $1",
+          [email]
+        );
+        if (result.rows.length === 0)
+          return h
+            .response({
+              message:
+                "If a user with this email exists, a reset link has been sent.",
+            })
+            .code(200); // Don't reveal if email exists
+
+        const userName = result.rows[0].name || "there";
+        const resetToken = Math.floor(10000 + Math.random() * 90000).toString();
+        resetTokens[email] = {
+          token: resetToken,
+          expires: Date.now() + 15 * 60 * 1000,
+        };
+        const resetLink = `${FRONTEND_URL}/reset-password?email=${encodeURIComponent(
+          email
+        )}&token=${resetToken}`;
+
+        // Styled email with highlighted token and link
+        const emailText = `Hi ${userName},
+
+          We received a request to reset the password for your account associated with this email address.
+
+          To reset your password, please use the following token:
+
+          ==============================
+          🔑 Reset Token: *${resetToken}*
+          ==============================
+
+          Or, you can simply click the button below:
+
+          ==============================
+          ${resetLink}
+          ==============================
+
+          If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.
+
+          ---
+
+          Best regards,  
+          The Foodinary Team  
+          foodinary.project@gmail.com | https://foodinary.com`;
+        try {
+          await transporter.sendMail({
+            from: `"${
+              process.env.APP_NAME ||
+              "Foodinary | Find Your Indonesia Recipe Here!"
+            }" <foodinary.project@gmail.com>`,
+            to: email,
+            subject: "Password Reset Request",
+            text: emailText,
+            html: `<div style="font-family:sans-serif;line-height:1.6">
+                     <p>Hi <b>${userName}</b>,</p>
+                     <p>We received a request to reset the password for your account associated with this email address.</p>
+                     <p>To reset your password, please use the following token:</p>
+                     <div style="background:#f5f5f5;border-radius:6px;padding:16px 24px;font-size:1.2em;display:inline-block;margin:12px 0;">
+                       <b>🔑 Reset Token: <span style="color:#1976d2;font-size:1.3em;">${resetToken}</span></b>
+                     </div>
+                     <p>Or, you can simply click the button below:</p>
+                     <a href="${resetLink}" style="display:inline-block;background:#1976d2;color:#fff;text-decoration:none;padding:12px 24px;border-radius:4px;font-weight:bold;margin:12px 0;">Reset Password</a>
+                     <p>If you didn’t request this, you can safely ignore this email. Your password will remain unchanged.</p>
+                     <hr>
+                     <p style="font-size:0.95em;">
+                       Best regards,<br>
+                       The Foodinary Team<br>
+                       <a href="mailto:foodinary.project@gmail.com" style="color:#1976d2">foodinary.project@gmail.com</a> | <a href="https://foodinary.com" style="color:#1976d2">https://foodinary.com</a>
+                     </p>
+                   </div>`,
+          });
+        } catch (err) {
+          console.error(err);
+        }
+        return h
+          .response({
+            message:
+              "If a user with this email exists, a reset link has been sent.",
+          })
+          .code(200);
+      } else if (token && newPassword) {
+        // Submitting new password
+        const record = resetTokens[email];
+        if (!record || record.token !== token || record.expires < Date.now()) {
+          return h
+            .response({ message: "Invalid or expired reset token" })
+            .code(400);
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await pool.query(
+          "UPDATE users SET password_hash = $1 WHERE email = $2",
+          [hashedPassword, email]
+        );
+        delete resetTokens[email];
+        return { message: "Password has been reset successfully." };
+      }
+      return h.response({ message: "Invalid request" }).code(400);
+    },
+  });
+
+    // UPDATE PROFILE
+    server.route({
+        method: "PUT",
+        path: "/update-profile",
+        options: {
+          validate: {
+            headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
+            payload: Joi.object({
+              newEmail: Joi.string().email().optional(),
+              newName: Joi.string().min(2).optional(),
+              newProfilePictureUrl: Joi.string().uri().allow(null, "").optional(),
+            }),
+            failAction: (request, h, err) => h.response({ statusCode: 400, message: err.details[0].message }).code(400).takeover(),
+          },
+        },
+        handler: async (request, h) => {
+            const decodedToken = verifyToken(request.headers.authorization.substring(7));
+            if (!decodedToken) { return h.response({ statusCode: 401, message: "Invalid or expired token" }).code(401); }
+            const userId = decodedToken.userId;
+            const { newEmail, newName, newProfilePictureUrl } = request.payload;
+            try {
+                const fields = [], values = []; let paramIndex = 1;
+                if (newName) { fields.push(`name = $${paramIndex++}`); values.push(newName); }
+                if (newEmail) { fields.push(`email = $${paramIndex++}`); values.push(newEmail); }
+                if (newProfilePictureUrl !== undefined) { fields.push(`profile_picture_url = $${paramIndex++}`); values.push(newProfilePictureUrl); }
+                if (fields.length === 0) { return h.response({ statusCode: 400, message: "No fields to update" }).code(400); }
+                values.push(userId);
+                const updateQuery = `UPDATE users SET ${fields.join(", ")} WHERE id = $${paramIndex} RETURNING id, email, name, profile_picture_url`;
+                const result = await pool.query(updateQuery, values);
+                if (result.rows.length === 0) { return h.response({ statusCode: 404, message: "User not found" }).code(404); }
+                return h.response({ statusCode: 200, message: "Profile updated successfully", user: result.rows[0] }).code(200);
+            } catch (err) {
+                console.error("Error updating profile:", err);
+                if (err.code === '23505') return h.response({ statusCode: 409, message: "Email already in use" }).code(409);
+                return h.response({ statusCode: 500, message: "Internal Server Error" }).code(500);
+            }
+        },
+    });
+
     // Food Prediction Route
     server.route({
         method: "POST",
@@ -199,16 +397,9 @@ const init = async () => {
                     return h.response({ statusCode: 404, message: "Could not identify the food in the image." }).code(404);
                 }
 
-                // --- FIX: Parse the prediction string and normalize for lookup ---
-                const rawPredictionString = result.data[0]; // e.g., "Lumpia (Akurasi: 98.12%)"
-                
-                // 1. Isolate the name by splitting at the parenthesis and trimming whitespace
+                const rawPredictionString = result.data[0];
                 const predictedName = rawPredictionString.split('(')[0].trim();
-                
-                // 2. Normalize the name for a robust, case-insensitive lookup
                 const lookupKey = predictedName.toLowerCase().replace(/\s+/g, ' ');
-
-                // 3. Find the recipe using the normalized key
                 const recipe = recipes[lookupKey];
                 
                 if (!recipe) {
@@ -229,6 +420,37 @@ const init = async () => {
                 return h.response({ statusCode: 500, message: "An error occurred while processing the image." }).code(500);
             }
         }
+    });
+
+    // GENERATE UPLOAD URL
+    server.route({
+        method: "POST",
+        path: "/generate-upload-url",
+        options: {
+          validate: {
+            headers: Joi.object({ authorization: Joi.string().required() }).unknown(true),
+            payload: Joi.object({
+              fileName: Joi.string().required(),
+              contentType: Joi.string().valid('image/jpeg', 'image/png', 'image/webp').required(),
+            }),
+            failAction: (request, h, err) => h.response({ statusCode: 400, message: err.details[0].message }).code(400).takeover(),
+          },
+        },
+        handler: async (request, h) => {
+          if (!storage) { return h.response({ statusCode: 500, message: "Cloud storage not configured" }).code(500); }
+          const decodedToken = verifyToken(request.headers.authorization.substring(7));
+          if (!decodedToken) { return h.response({ statusCode: 401, message: "Unauthorized" }).code(401); }
+          const { fileName, contentType } = request.payload;
+          const uniqueFileName = `${decodedToken.userId}-${Date.now()}-${fileName.replace(/\s+/g, '_')}`;
+          const options = { version: "v4", action: "write", expires: Date.now() + 15 * 60 * 1000, contentType };
+          try {
+            const [url] = await storage.bucket(GCS_BUCKET_NAME).file(uniqueFileName).getSignedUrl(options);
+            return { statusCode: 200, uploadUrl: url, publicUrl: `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${uniqueFileName}` };
+          } catch (error) {
+            console.error("Failed to generate signed URL:", error);
+            return h.response({ statusCode: 500, message: "Failed to generate upload URL." }).code(500);
+          }
+        },
     });
     
   // --- Server Start ---
