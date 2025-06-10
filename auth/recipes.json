@@ -2,7 +2,7 @@
   "recipes": [
     {
       "id": 1,
-      "name": "Bakso Sapi",
+      "name": "Bakso",
       "rasa_dominan": "Asin",
       "asal_daerah": "Solo, Malang, Wonogiri",
       "deskripsi": "Bakso sapi adalah makanan khas Indonesia yang dibuat dari daging sapi giling, bumbu, dan tepung tapioka. Hidangan ini memiliki tekstur kenyal dan cita rasa gurih, cocok disajikan dengan kuah hangat, mi, dan pelengkap lainnya.",
@@ -35,7 +35,7 @@
     },
     {
       "id": 2,
-      "name": "Ayam Goreng Lengkuas",
+      "name": "Ayam Goreng Bumbu Lengkuas",
       "rasa_dominan": "Gurih",
       "asal_daerah": "Jawa Tengah",
       "deskripsi": "Ayam Goreng Lengkuas adalah ayam khas Indonesia yang direbus dengan bumbu rempah dan parutan lengkuas, lalu digoreng hingga renyah. Ciri utamanya adalah aroma lengkuas yang kuat dan bumbunya yang kriuk.",
@@ -238,10 +238,10 @@
     },
     {
       "id": 7,
-      "name": "Telur Dadar Padang",
+      "name": "Telur Dadar",
       "rasa_dominan": "Gurih",
       "asal_daerah": "Sumatera Barat",
-      "deskripsi": "Telur Dadar Padang adalah olahan telur khas rumah makan Padang yang dikenal dengan bentuknya tebal, berisi banyak bumbu dan daun bawang, serta tekstur bagian luar yang renyah. Biasanya dihidangkan sebagai lauk pelengkap rendang atau sambal hijau. Meski sederhana, rasa rempahnya kuat dan khas.",
+      "deskripsi": "Telur Dadar adalah olahan telur khas rumah makan Padang yang dikenal dengan bentuknya tebal, berisi banyak bumbu dan daun bawang, serta tekstur bagian luar yang renyah. Biasanya dihidangkan sebagai lauk pelengkap rendang atau sambal hijau. Meski sederhana, rasa rempahnya kuat dan khas.",
       "alat": [
         "Wajan datar",
         "Mangkuk/mixing bowl",
@@ -741,10 +741,10 @@
     },
     {
       "id": 18,
-      "name": "Sate kambing",
+      "name": "Sate",
       "rasa_dominan": "asin, pedas, manis",
       "asal_daerah": "Jawa Tengah dan Jawa Timur",
-      "deskripsi": "Sate kambing merupakan salah satu olahan daging yang sangat populer, terutama saat perayaan Iduladha. Daging kambing yang diperoleh dari hewan kurban sering diolah menjadi berbagai hidangan lezat, dan sate menjadi pilihan favorit banyak orang. Namun, daging kambing dikenal memiliki tekstur yang lebih alot dan aroma khas yang bisa mengganggu jika tidak diolah dengan baik. Oleh karena itu, diperlukan tips khusus agar daging menjadi empuk dan tidak berbau. Penggunaan bumbu khas Nusantara seperti bumbu kecap, kacang, hingga racikan rempah-rempah lainnya menjadi kunci dalam menghasilkan cita rasa sate kambing yang menggugah selera.",
+      "deskripsi": "Sate merupakan salah satu olahan daging yang sangat populer, terutama saat perayaan Iduladha. Daging kambing yang diperoleh dari hewan kurban sering diolah menjadi berbagai hidangan lezat, dan sate menjadi pilihan favorit banyak orang. Namun, daging kambing dikenal memiliki tekstur yang lebih alot dan aroma khas yang bisa mengganggu jika tidak diolah dengan baik. Oleh karena itu, diperlukan tips khusus agar daging menjadi empuk dan tidak berbau. Penggunaan bumbu khas Nusantara seperti bumbu kecap, kacang, hingga racikan rempah-rempah lainnya menjadi kunci dalam menghasilkan cita rasa Sate yang menggugah selera.",
       "alat": [
         "Pisau",
         "Talenan",
@@ -772,14 +772,14 @@
         "4. Lumuri daging dengan bumbu halus, lalu diamkan 10 menit agar meresap.",
         "5. Bakar sate hingga setengah matang, lalu olesi kembali dengan sisa bumbu.",
         "6. Saat hampir matang, olesi dengan kecap dan panggang hingga daging matang sempurna dan empuk.",
-        "7. Sajikan sate kambing selagi hangat."
+        "7. Sajikan Sate selagi hangat."
       ],
       "sumber": "https://chatgpt.com/c/68233ddc-0ff0-800b-91bf-cdbd1d3526a3",
       "gambar": "https://assets.unileversolutions.com/recipes-v2/252624.png"
     },
     {
       "id": 19,
-      "name": "Soto Ayam Kuning",
+      "name": "Soto",
       "rasa_dominan": "Gurih",
       "asal_daerah": "Jawa Timur",
       "deskripsi": "Soto ayam kuning memiliki cita rasa gurih dan segar yang menggugah selera. Isian berupa ayam suwir dan sayuran menjadikannya hidangan yang mengenyangkan, apalagi saat disantap bersama nasi hangat. Warna kuning pada kuah berasal dari kunyit, yang tak hanya memperkaya aroma dan rasa kaldu, tetapi juga bermanfaat untuk meningkatkan daya tahan tubuh.",
@@ -1150,7 +1150,7 @@
       "name": "Lumpia",
       "rasa_dominan": "Manis, Gurih",
       "asal_daerah": "Semarang",
-      "deskripsi": "Lumpia adalah makanan khas hasil akulturasi budaya Tionghoa-Jawa. Berisi rebung, ayam dan udang dengan saus coklat khas yang manis gurih.",
+      "deskripsi": "Lumpia Semarang adalah makanan khas hasil akulturasi budaya Tionghoa-Jawa. Berisi rebung, ayam dan udang dengan saus coklat khas yang manis gurih.",
       "alat": [
         "Wajan",
         "Spatula",
@@ -1250,10 +1250,10 @@
     },
     {
       "id": 30,
-      "name": "Lemper Ayam",
+      "name": "Kue Lemper",
       "rasa_dominan": "Gurih",
       "asal_daerah": "Jawa",
-      "deskripsi": "Lemper adalah jajanan tradisional Jawa berisi ayam suwir bumbu yang dibungkus ketan. Biasanya dibungkus daun pisang dan sering disajikan dalam acara spesial.",
+      "deskripsi": "Kue Lemper adalah jajanan tradisional Jawa berisi ayam suwir bumbu yang dibungkus ketan. Biasanya dibungkus daun pisang dan sering disajikan dalam acara spesial.",
       "alat": [
         "Panci",
         "Wajan",
